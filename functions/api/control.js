@@ -1,15 +1,6 @@
 // Cloudflare Pages Function - 巴法云控制代理
+// 正确 API: POST https://apis.bemfa.com/va/postJsonMsg
 const cacheStore = {};
-
-async function fetchWithTimeout(url, options = {}, timeout = 6000) {
-  const controller = new AbortController();
-  const tid = setTimeout(() => controller.abort(), timeout);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(tid);
-  }
-}
 
 function corsHeaders() {
   return {
@@ -54,26 +45,36 @@ export async function onRequest(context) {
     return jsonResp({ code: -1, msg: "missing params" }, 400);
   }
 
+  // 5 秒去重
   const cacheKey = `${uid}:${topic}:${msg}`;
   const now = Date.now();
   if (cacheStore[cacheKey] && now - cacheStore[cacheKey] < 5000) {
     return jsonResp({ code: 0, msg: "cached", cached: true }, 200);
   }
 
-  const bemfaUrl = `https://apis.bemfa.com/v1/control?uid=${encodeURIComponent(uid)}&topic=${encodeURIComponent(topic)}&type=1&msg=${encodeURIComponent(msg)}`;
+  // 正确 API: POST https://apis.bemfa.com/va/postJsonMsg
+  const apiUrl = "https://apis.bemfa.com/va/postJsonMsg";
+  const payload = { uid, topic, type: 1, msg };
 
   try {
-    const resp = await fetchWithTimeout(bemfaUrl, {}, 6000);
-    const text = await resp.text();
-    let data = {};
-    try { data = JSON.parse(text); } catch { /* parse error but still treat as success */ }
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 6000);
+    const resp = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal,
+    });
+    clearTimeout(tid);
+
+    const data = await resp.json().catch(() => ({ code: -1, message: "parse error" }));
     cacheStore[cacheKey] = now;
-    // 巴法云返回 code:0 或 200 都视为成功
-    const ok = data.code === 0 || data.code === 200 || resp.status === 200;
+
     return jsonResp({
-      code: ok ? 0 : (data.code ?? -1),
-      msg: ok ? "OK" : (data.msg || "parse error"),
+      code: data.code ?? -1,
+      msg: data.message ?? "OK",
       cached: false,
+      raw: data,
     }, 200);
   } catch (e) {
     return jsonResp({ code: -1, msg: "timeout: " + e.message }, 504);
