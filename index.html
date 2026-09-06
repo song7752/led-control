@@ -386,9 +386,9 @@
         const ms = Date.now() - t0;
         console.log('API response:', data);
 
-        if (data.code === 0 || data.cached) {
+        if (data.code === 0) {
           setState(cmd);
-          showToast(data.cached ? `⏱ 缓存: ${cmd}` : `✓ ${data.ms || ms}ms ${cmd}`);
+          showToast(`✓ ${data.ms || ms}ms ${cmd}`);
         } else {
           // 显示详细错误
           let detail = data.msg || '未知错误';
