@@ -359,12 +359,12 @@
       bulb.className    = 'bulb ' + s;
       wrap.className    = 'bulb-wrap ' + s;
     }
-    function showToast(msg) {
+    function showToast(msg, duration) {
       const t = document.getElementById('toast');
       t.textContent = msg;
       t.classList.add('show');
       clearTimeout(showToast._t);
-      showToast._t = setTimeout(() => t.classList.remove('show'), 1800);
+      showToast._t = setTimeout(() => t.classList.remove('show'), duration || 1800);
     }
     function setButtons(enabled) {
       document.getElementById('btnOn').disabled  = !enabled;
@@ -375,6 +375,7 @@
     async function send(cmd) {
       if (!config.uid) { toggleConfig(); return; }
       setButtons(false);
+      const t0 = Date.now();
       try {
         const res = await fetch(config.apiControl, {
           method: 'POST',
@@ -382,15 +383,22 @@
           body: JSON.stringify({ uid: config.uid, topic: config.topic, msg: cmd })
         });
         const data = await res.json();
+        const ms = Date.now() - t0;
+        console.log('API response:', data);
+
         if (data.code === 0 || data.cached) {
           setState(cmd);
-          showToast(data.cached ? '⏱ 缓存: ' + cmd : '✓ 已发送: ' + cmd);
+          showToast(data.cached ? `⏱ 缓存: ${cmd}` : `✓ ${data.ms || ms}ms ${cmd}`);
         } else {
-          showToast('✗ 失败: ' + (data.msg || '未知错误'));
+          // 显示详细错误
+          let detail = data.msg || '未知错误';
+          if (data.stage) detail = `[${data.stage}] ${detail}`;
+          if (data.http_status) detail += ` (HTTP ${data.http_status})`;
+          showToast(`✗ ${detail}`, 4000);
         }
       } catch (e) {
-        showToast('✗ 网络错误');
-        console.error(e);
+        showToast('✗ 网络错误: ' + e.message, 4000);
+        console.error('fetch error:', e);
       } finally {
         setButtons(true);
       }
