@@ -1,4 +1,4 @@
-// Cloudflare Pages Function - 巴法云控制代理(乐观更新版)
+// Cloudflare Pages Function - 巴法云控制代理(简单版)
 const cacheStore = {};
 const requestLog = [];
 
@@ -55,21 +55,10 @@ export async function onRequest(context) {
     return jsonResp({ code: -1, msg: "missing params (uid/topic/msg)" }, 400);
   }
 
+  // 短去重(2秒,只挡双击),每次实际调用巴法云
   const cacheKey = `${uid}:${topic}:${msg}`;
   const now = Date.now();
-  const cached = cacheStore[cacheKey] && (now - cacheStore[cacheKey] < 5000);
-
-  // 无论是否缓存,都返回成功(乐观响应)
-  // 但只在非缓存时才真发巴法云
-  if (cached) {
-    addLog({ type: "cache_skip", uid, topic, msg, note: "5s dedup, not resent" });
-    return jsonResp({
-      code: 0,
-      msg: "OK (cached, not resent)",
-      cached: true,
-      real_sent: false,
-    }, 200);
-  }
+  const recentlySent = cacheStore[cacheKey] && (now - cacheStore[cacheKey] < 2000);
 
   const apiUrl = "https://apis.bemfa.com/va/postJsonMsg";
   const payload = { uid, topic, type: 1, msg };
@@ -92,10 +81,7 @@ export async function onRequest(context) {
     try { data = JSON.parse(text); } catch (e) { data = { raw: text.substring(0, 200) }; }
 
     const ok = data.code === 0;
-    if (ok) {
-      // 只在成功时记录缓存
-      cacheStore[cacheKey] = now;
-    }
+    if (ok) cacheStore[cacheKey] = now;
 
     addLog({
       type: "control",
@@ -104,17 +90,16 @@ export async function onRequest(context) {
       ms,
       bemfa_code: data.code,
       bemfa_msg: data.message,
+      recently_sent: recentlySent,
       ok,
     });
 
     return jsonResp({
       code: ok ? 0 : (data.code ?? -1),
       msg: ok ? "OK" : (data.message || "failed"),
-      cached: false,
-      real_sent: true,
       http_status: resp.status,
       ms,
-      detail: data,
+      recently_sent: recentlySent,
     }, 200);
   } catch (e) {
     addLog({ type: "fetch_error", error: e.message, uid, topic, msg });
@@ -122,7 +107,6 @@ export async function onRequest(context) {
       code: -1,
       msg: "fetch failed: " + e.message,
       stage: "cloudflare_to_bemfa",
-      real_sent: false,
     }, 504);
   }
 }
