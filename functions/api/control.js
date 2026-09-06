@@ -1,6 +1,6 @@
-// Cloudflare Pages Function - 巴法云控制代理(详细错误版)
+// Cloudflare Pages Function - 巴法云控制代理(乐观更新版)
 const cacheStore = {};
-const requestLog = []; // 最近 10 条请求日志,方便调试
+const requestLog = [];
 
 function corsHeaders() {
   return {
@@ -31,7 +31,6 @@ export async function onRequest(context) {
     return new Response(null, { status: 204, headers: corsHeaders() });
   }
 
-  // 调试端点:看最近日志
   if (url.pathname === "/api/logs" && method === "GET") {
     return jsonResp({ logs: requestLog }, 200);
   }
@@ -48,21 +47,28 @@ export async function onRequest(context) {
   try {
     body = await request.json();
   } catch (e) {
-    addLog({ type: "parse_error", error: e.message });
     return jsonResp({ code: -1, msg: "bad json: " + e.message }, 400);
   }
 
   const { uid, topic, msg } = body;
   if (!uid || !topic || !msg) {
-    addLog({ type: "missing_params", body });
     return jsonResp({ code: -1, msg: "missing params (uid/topic/msg)" }, 400);
   }
 
   const cacheKey = `${uid}:${topic}:${msg}`;
   const now = Date.now();
-  if (cacheStore[cacheKey] && now - cacheStore[cacheKey] < 5000) {
-    addLog({ type: "cache_hit", uid, topic, msg });
-    return jsonResp({ code: 0, msg: "cached (5s)", cached: true }, 200);
+  const cached = cacheStore[cacheKey] && (now - cacheStore[cacheKey] < 5000);
+
+  // 无论是否缓存,都返回成功(乐观响应)
+  // 但只在非缓存时才真发巴法云
+  if (cached) {
+    addLog({ type: "cache_skip", uid, topic, msg, note: "5s dedup, not resent" });
+    return jsonResp({
+      code: 0,
+      msg: "OK (cached, not resent)",
+      cached: true,
+      real_sent: false,
+    }, 200);
   }
 
   const apiUrl = "https://apis.bemfa.com/va/postJsonMsg";
@@ -85,7 +91,11 @@ export async function onRequest(context) {
     let data = {};
     try { data = JSON.parse(text); } catch (e) { data = { raw: text.substring(0, 200) }; }
 
-    cacheStore[cacheKey] = now;
+    const ok = data.code === 0;
+    if (ok) {
+      // 只在成功时记录缓存
+      cacheStore[cacheKey] = now;
+    }
 
     addLog({
       type: "control",
@@ -94,13 +104,14 @@ export async function onRequest(context) {
       ms,
       bemfa_code: data.code,
       bemfa_msg: data.message,
-      ok: data.code === 0,
+      ok,
     });
 
     return jsonResp({
-      code: data.code ?? -1,
-      msg: data.message ?? "OK",
+      code: ok ? 0 : (data.code ?? -1),
+      msg: ok ? "OK" : (data.message || "failed"),
       cached: false,
+      real_sent: true,
       http_status: resp.status,
       ms,
       detail: data,
@@ -111,6 +122,7 @@ export async function onRequest(context) {
       code: -1,
       msg: "fetch failed: " + e.message,
       stage: "cloudflare_to_bemfa",
+      real_sent: false,
     }, 504);
   }
 }
