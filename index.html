@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f0f1e" />
+  <title>我的远程灯</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(ellipse at top left, #1a1a3e 0%, transparent 50%),
+        radial-gradient(ellipse at bottom right, #2e1a4e 0%, transparent 50%),
+        #0a0a1e;
+      color: #fff;
+      padding: 20px;
+      overflow-x: hidden;
+    }
+
+    /* ===== 卡片 ===== */
+    .card {
+      background: rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 28px;
+      padding: 36px 28px 32px;
+      max-width: 380px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      position: relative;
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      color: #8a8a9e;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 4px 10px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      letter-spacing: 0.5px;
+    }
+    .badge .dot {
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #22c55e;
+      margin-right: 6px;
+      vertical-align: middle;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      letter-spacing: 1px;
+    }
+    .sub {
+      font-size: 12px;
+      color: #8a8a9e;
+      margin-bottom: 32px;
+    }
+
+    /* ===== 灯泡 ===== */
+    .bulb-wrap {
+      position: relative;
+      width: 160px;
+      height: 160px;
+      margin: 0 auto 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .bulb {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 72px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 2px solid rgba(255, 255, 255, 0.08);
+      transition: all 0.4s ease;
+      position: relative;
+      z-index: 2;
+    }
+    .bulb.on {
+      background: radial-gradient(circle at 35% 35%, #fffacd 0%, #ffd54f 50%, #ff8a00 100%);
+      border-color: #ffb300;
+      box-shadow:
+        0 0 40px #ffb300,
+        0 0 80px rgba(255, 138, 0, 0.6),
+        inset 0 0 20px rgba(255, 255, 255, 0.3);
+    }
+    .bulb-glow {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 0; height: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 179, 0, 0.4) 0%, transparent 70%);
+      transition: all 0.4s ease;
+      z-index: 1;
+    }
+    .bulb-wrap.on .bulb-glow {
+      width: 240px; height: 240px;
+    }
+
+    /* ===== 状态文字 ===== */
+    .status {
+      font-size: 14px;
+      color: #aaa;
+      margin-bottom: 28px;
+    }
+    .status strong {
+      color: #fff;
+      font-size: 17px;
+      font-weight: 600;
+      margin-left: 4px;
+    }
+
+    /* ===== 按钮 ===== */
+    .btns {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    button {
+      flex: 1;
+      padding: 16px;
+      border: none;
+      border-radius: 16px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #fff;
+      transition: transform 0.1s, box-shadow 0.2s, opacity 0.2s;
+      letter-spacing: 1px;
+    }
+    button:active { transform: scale(0.96); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-on {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+    }
+    .btn-off {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+    }
+
+    .footer {
+      margin-top: 20px;
+      font-size: 11px;
+      color: #555;
+      letter-spacing: 0.5px;
+    }
+
+    /* ===== 提示 ===== */
+    .toast {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(10px);
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 24px;
+      font-size: 13px;
+      opacity: 0;
+      transition: all 0.3s ease;
+      pointer-events: none;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      z-index: 999;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ===== 配置面板(开发用) ===== */
+    .config-toggle {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #8a8a9e;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .config-panel {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(10px);
+      z-index: 998;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .config-panel.show { display: flex; }
+    .config-box {
+      background: #1a1a2e;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 28px 24px;
+      max-width: 360px;
+      width: 100%;
+    }
+    .config-box h2 {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+    .config-box p {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+    .config-box label {
+      display: block;
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 6px;
+      text-align: left;
+    }
+    .config-box input {
+      width: 100%;
+      padding: 12px 14px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 14px;
+      margin-bottom: 16px;
+      font-family: monospace;
+    }
+    .config-box input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    .config-box .actions {
+      display: flex;
+      gap: 10px;
+    }
+    .config-box button {
+      padding: 12px;
+      font-size: 14px;
+    }
+    .btn-save {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+    }
+    .btn-cancel {
+      background: rgba(255, 255, 255, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <button class="config-toggle" onclick="toggleConfig()" title="设置">⚙</button>
+    <div class="badge"><span class="dot"></span>已连接</div>
+    <h1>💡 我的远程灯</h1>
+    <div class="sub">via 巴法云 · ESP32-C3</div>
+
+    <div class="bulb-wrap" id="bulbWrap">
+      <div class="bulb-glow"></div>
+      <div class="bulb" id="bulb">💡</div>
+    </div>
+
+    <div class="status">当前状态:<strong id="state">--</strong></div>
+
+    <div class="btns">
+      <button class="btn-on"  id="btnOn"  onclick="send('on')">点亮</button>
+      <button class="btn-off" id="btnOff" onclick="send('off')">熄灭</button>
+    </div>
+
+    <div class="footer">每 3 秒自动同步 · 长按 ⚙ 改配置</div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- 配置面板 -->
+  <div class="config-panel" id="configPanel">
+    <div class="config-box">
+      <h2>⚙ 配置</h2>
+      <p>从 <a href="https://cloud.bemfa.com" target="_blank" style="color:#667eea">cloud.bemfa.com</a> 后台复制 UID 和主题名</p>
+      <label>巴法云 UID</label>
+      <input type="text" id="cfgUid" placeholder="例如:abc123def456" />
+      <label>主题名 (Topic)</label>
+      <input type="text" id="cfgTopic" placeholder="例如:led001" />
+      <div class="actions">
+        <button class="btn-cancel" style="flex:1" onclick="toggleConfig()">取消</button>
+        <button class="btn-save"   style="flex:2" onclick="saveConfig()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== 配置(支持网页内设置,localStorage 持久化) =====
+    const STORE_KEY = 'led_control_config';
+    const config = {
+      uid: localStorage.getItem(STORE_KEY + '_uid') || '8753749cc23eb5a79b143baaff67266e',
+      topic: localStorage.getItem(STORE_KEY + '_topic') || 'esp32wife',
+      // 走 Cloudflare Pages Functions 代理(同源,无 CORS)
+      apiControl: '/api/control',
+      apiStatus:  '/api/control'
+    };
+
+    function toggleConfig() {
+      const p = document.getElementById('configPanel');
+      p.classList.toggle('show');
+      if (p.classList.contains('show')) {
+        document.getElementById('cfgUid').value   = config.uid;
+        document.getElementById('cfgTopic').value = config.topic;
+      }
+    }
+    function saveConfig() {
+      const uid   = document.getElementById('cfgUid').value.trim();
+      const topic = document.getElementById('cfgTopic').value.trim();
+      if (!uid)   { showToast('UID 不能为空'); return; }
+      if (!topic) { showToast('主题名不能为空'); return; }
+      localStorage.setItem(STORE_KEY + '_uid', uid);
+      localStorage.setItem(STORE_KEY + '_topic', topic);
+      config.uid = uid;
+      config.topic = topic;
+      toggleConfig();
+      showToast('已保存,正在测试...');
+      refresh();
+    }
+
+    // ===== UI 更新 =====
+    function setState(s) {
+      const bulb   = document.getElementById('bulb');
+      const wrap   = document.getElementById('bulbWrap');
+      const label  = document.getElementById('state');
+      label.textContent = s.toUpperCase();
+      bulb.className    = 'bulb ' + s;
+      wrap.className    = 'bulb-wrap ' + s;
+    }
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => t.classList.remove('show'), 1800);
+    }
+    function setButtons(enabled) {
+      document.getElementById('btnOn').disabled  = !enabled;
+      document.getElementById('btnOff').disabled = !enabled;
+    }
+
+    // ===== API (POST 走 Pages Functions 代理) =====
+    async function send(cmd) {
+      if (!config.uid) { toggleConfig(); return; }
+      setButtons(false);
+      try {
+        const res = await fetch(config.apiControl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid: config.uid, topic: config.topic, msg: cmd })
+        });
+        const data = await res.json();
+        if (data.code === 0 || data.cached) {
+          setState(cmd);
+          showToast(data.cached ? '⏱ 缓存: ' + cmd : '✓ 已发送: ' + cmd);
+        } else {
+          showToast('✗ 失败: ' + (data.msg || '未知错误'));
+        }
+      } catch (e) {
+        showToast('✗ 网络错误');
+        console.error(e);
+      } finally {
+        setButtons(true);
+      }
+    }
+
+    function refresh() {
+      // 状态由 ESP32 上报到巴法云
+    }
+
+    // ===== 启动 =====
+    if (!config.uid) {
+      setTimeout(toggleConfig, 300);
+    }
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>
